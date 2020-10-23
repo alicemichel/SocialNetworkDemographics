@@ -111,7 +111,6 @@ listGroups		<- c('Diadema 2', 'Diadema 3', 'Fulvus 2', 'Fulvus 3')
 listFocalByGroup	<- list(focalListNoOdilon[focalListNoOdilon$group_id == listGroups[1],], focalListNoOdilon[focalListNoOdilon$group_id == listGroups[2],],
 				focalListNoOdilon[focalListNoOdilon$group_id == listGroups[3],], focalListNoOdilon[focalListNoOdilon$group_id == listGroups[4],])
 
-#Still need to deal with Raketa, Voa, and Akofa
 allFocalDurations	<- list()
 for(i in 1:4){ #for groups
 	groupsFocals	<- listFocalByGroup[[i]]
@@ -120,6 +119,37 @@ for(i in 1:4){ #for groups
 }
 
 allObsMatList	<- lapply(allFocalDurations, createObsMatrix) #Need to adjust for Vo, Rk, and Af
+
+## Pre Akofa
+preAf			<- listFocalByGroup[[3]][listFocalByGroup[[3]]$focal_start_chron < '2019-09-25',]
+preAfFocalTable	<- data.frame(focal_individual_id = listAnimalsByGroup[[3]], duration = c(0, tapply(preAf$focalDuration, preAf$focal_individual_id, FUN = sum)))
+preAfObsMat		<- createObsMatrix(preAfFocalTable)
+nonAf			<- c(1, rep(0, 7))
+Af			<- rep(1, 8)
+zeroingMatF2	<- matrix(c(Af, rep(nonAf, 7)), nrow = 8, ncol = 8)
+subMatF2		<- preAfObsMat * zeroingMatF2
+
+## Post Voa
+postVo		<- listFocalByGroup[[1]][listFocalByGroup[[1]]$focal_start_chron > '2019-09-27' & listFocalByGroup[[1]]$focal_individual_id != 'Vo',]
+focalTableD2	<- tapply(postVo$focalDuration, postVo$focal_individual_id, FUN = sum)
+postVoFocalTable	<- data.frame(focal_individual_id = listAnimalsByGroup[[1]], duration = c(focalTableD2[1:9], 0, focalTableD2[10]))
+postVoObsMat	<- createObsMatrix(postVoFocalTable)
+nonVo			<- c(rep(0, 9), 1, 0)
+Vo			<- rep(1, 11)
+zeroingMatD2	<- matrix(c(rep(nonVo, 9), Vo, nonVo), nrow = 11, ncol = 11)
+subMatD2		<- postVoObsMat * zeroingMatD2
+
+## Post Raketa
+postRk		<- listFocalByGroup[[4]][listFocalByGroup[[4]]$focal_start_chron > '2019-09-27' & listFocalByGroup[[4]]$focal_individual_id != 'Rk',]
+focalTableF3	<- tapply(postRk$focalDuration, postRk$focal_individual_id, FUN = sum)
+postRkFocalTable	<- data.frame(focal_individual_id = listAnimalsByGroup[[4]], duration = c(focalTableF3[1:3], 0, focalTableF3[4:6]))
+postRkObsMat	<- createObsMatrix(postRkFocalTable)
+nonRk			<- c(rep(0, 3), 1, rep(0, 3))
+Rk			<- rep(1, 7)
+zeroingMatF3	<- matrix(c(rep(nonRk, 3), Rk, rep(nonRk, 3)), nrow = 7, ncol = 7)
+subMatF3		<- postRkObsMat * zeroingMatF3
+
+allObsMatList	<- list(allObsMatList[[1]] - subMatD2, allObsMatList[[2]], allObsMatList[[3]] - subMatF2, allObsMatList[[4]] - subMatF3)
 
 ################################
 ### Removing problem animals ###
@@ -223,17 +253,17 @@ set.edge.value(d3plynet, 'logObs', log(60*allObsMatList[[2]]))
 ### ERGM's ###
 ##############
 
-model1	<- ergm(d2plynet ~ sum + mutual(form = 'min') + nonzero + transitiveweights('min', 'max', 'min') + 
-	nodematch('sex', form = 'sum') + edgecov(d2plynet, 'agediff', form = 'sum') + nodecov('age', form = 'sum') + 
+model1	<- ergm(d2plynet ~ sum + mutual(form = 'min') + nonzero + transitiveweights('min', 'max', 'min') + nodefactor('sex', form = 'sum') +
+	nodematch('sex', form = 'sum') + edgecov(d2plynet, 'agediff', form = 'sum') + nodefactor('age', form = 'sum') + 
 	edgecov(d2plynet, 'rankdiff', form = 'sum') + nodecov('elo', form = 'sum') + edgecov(d2plynet, 'grm', form = 'sum') + edgecov(d2plynet, 'logObs', form = 'sum'), response = 'numply', reference = ~Poisson,
 	control = control.ergm(MCMC.interval = 1000, MCMLE.maxit = 200, init.method = 'CD', MCMC.samplesize = 1000, seed = 32164))
 
-summary(model1)
-mcmc.diagnostics(model1)
+summary(model2)
+mcmc.diagnostics(model2)
 
 
-model2	<- ergm(d3plynet ~ sum + mutual(form = 'min') + nonzero + transitiveweights('min', 'max', 'min') + 
-	nodematch('sex', form = 'sum') + edgecov(d3plynet, 'agediff', form = 'sum') + nodecov('age', form = 'sum') + 
+model2	<- ergm(d3plynet ~ sum + mutual(form = 'min') + nonzero + transitiveweights('min', 'max', 'min') + nodefactor('sex', form = 'sum') +
+	nodematch('sex', form = 'sum') + edgecov(d3plynet, 'agediff', form = 'sum') + nodefactor('age', form = 'sum') + 
 	edgecov(d3plynet, 'rankdiff', form = 'sum') + nodecov('elo', form = 'sum') + edgecov(d3plynet, 'grm', form = 'sum') + edgecov(d3plynet, 'logObs', form = 'sum'), response = 'numply', reference = ~Poisson,
 	control = control.ergm(MCMC.interval = 1000, MCMLE.maxit = 200, init.method = 'CD', MCMC.samplesize = 1000, seed = 32164))
 
